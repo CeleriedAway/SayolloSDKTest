@@ -56,8 +56,6 @@ namespace SayolloSDK
         {
             if (videoAd != null)
                 videoAd.Cancel(false);
-            if (purchAd != null)
-                purchAd.Cancel(false);
             videoAd = new VideoAd(webRequestController, sayolloSdkConfig.VideoAdCanvasPrefab, sayolloSdkConfig.VideoUri);
             return videoAd;
         }
@@ -66,8 +64,6 @@ namespace SayolloSDK
         {
             if (purchAd != null)
                 purchAd.Cancel(false);
-            if (videoAd != null)
-                videoAd.Cancel(false);
             purchAd = new PurchaseAd(webRequestController, sayolloSdkConfig.PurchaseAdCanvasPrefab, sayolloSdkConfig.PurchaseItemUrl, sayolloSdkConfig.UserInfoUrl);
             return purchAd;
         }
