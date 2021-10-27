@@ -12,12 +12,11 @@ namespace SayolloSDK
 {
     public class PurchaseAd
     {
-        public SayolloSDK.AdStatus Status { get; private set; }
+        public SayolloSDK.AdResult result { get; private set; }
 
         public UnityEvent onDismissed = new UnityEvent();
         public UnityEvent onFinished = new UnityEvent();
 
-        private WebRequestController webRequestController;
         private ItemData itemData;
         private string purchaseUri;
         private string userInfoUri;
@@ -25,16 +24,15 @@ namespace SayolloSDK
         private PurchaseViewController canvasPrefab;
         private PurchaseViewController canvas;
 
-        public PurchaseAd(WebRequestController requestController, PurchaseViewController purchaseAdCanvasPrefab, string purchUri, string userUri)
+        public PurchaseAd(PurchaseViewController purchaseAdCanvasPrefab, string purchUri, string userUri)
         {
-            webRequestController = requestController;
             canvasPrefab = purchaseAdCanvasPrefab;
             purchaseUri = purchUri;
             userInfoUri = userUri;
         }
         public void Show()
         {
-            if (Status == SayolloSDK.AdStatus.Ready)
+            if (result == SayolloSDK.AdResult.Ready)
             {
                 ShowSavedPurchase(itemData);
             }
@@ -46,10 +44,10 @@ namespace SayolloSDK
         }
         public void Prepare()
         {
-            Status = SayolloSDK.AdStatus.Loading;
+            result = SayolloSDK.AdResult.Loading;
             SayolloSDK.Instance.StartCoroutine
             (
-                webRequestController.EmptyPost(purchaseUri,
+                WebTools.EmptyPost(purchaseUri,
                 onSuccess: HandlePurchaseLoaded,
                 onError: HandlePurchaseLoadError)
             );
@@ -58,7 +56,7 @@ namespace SayolloSDK
         {
             result = result.Replace("'", "\"");
             ItemData itemData = JsonUtility.FromJson<ItemData>(result);
-            Status = SayolloSDK.AdStatus.Ready;
+            this.result = SayolloSDK.AdResult.Ready;
             if (showOnLoad)
             {
                 showOnLoad = false;
@@ -71,7 +69,7 @@ namespace SayolloSDK
             canvas = GameObject.Instantiate(canvasPrefab);
             canvas.SetItem(itemData);
             SayolloSDK.Instance.StartCoroutine(
-                webRequestController.DownloadImage(itemData.item_image, HandleImageDownloaded)
+                WebTools.DownloadImage(itemData.item_image, HandleImageDownloaded)
             );
             canvas.onPurchase.AddListener(OnPurchase);
             canvas.onClose.AddListener(OnClose);
@@ -79,7 +77,7 @@ namespace SayolloSDK
 
         private void OnClose()
         {
-            Status = SayolloSDK.AdStatus.Cancelled;
+            result = SayolloSDK.AdResult.Cancelled;
             GameObject.Destroy(canvas);
             onDismissed.Invoke();
         }
@@ -87,7 +85,7 @@ namespace SayolloSDK
         private void OnPurchase(UserData data)
         {
             SayolloSDK.Instance.StartCoroutine(
-                webRequestController.PostUserData(userInfoUri,
+                webTools.PostUserData(userInfoUri,
                 data,
                 HandleSuccessBuy,
                 HandleErrorBuy)
@@ -95,7 +93,7 @@ namespace SayolloSDK
         }
         private void HandleSuccessBuy(string result)
         {
-            Status = SayolloSDK.AdStatus.Finished;
+            this.result = SayolloSDK.AdResult.Finished;
             canvas.ShowSuccess();
             onFinished.Invoke();
         }
@@ -112,13 +110,13 @@ namespace SayolloSDK
         }
         private void HandlePurchaseLoadError(string error)
         {
-            Status = SayolloSDK.AdStatus.Cancelled;
+            result = SayolloSDK.AdResult.Cancelled;
         }
         public void Cancel(bool invokeEvent = true)
         {
             GameObject.Destroy(canvas.gameObject);
             SayolloSDK.Instance.StopAllCoroutines();
-            Status = SayolloSDK.AdStatus.Cancelled;
+            result = SayolloSDK.AdResult.Cancelled;
             if (invokeEvent)
                 onDismissed.Invoke();
             onDismissed.RemoveAllListeners();

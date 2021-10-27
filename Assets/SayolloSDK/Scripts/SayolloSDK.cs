@@ -9,13 +9,11 @@ namespace SayolloSDK
 {
     public class SayolloSDK : MonoBehaviour
     {
-        public enum AdStatus
+        public enum AdResult
         {
-            Loading,
-            Ready,
-            InProgress,
-            Cancelled,
-            Finished
+            Success,
+            Error,
+            Cancelled
         }
 
         private static SayolloSDK _instance;
@@ -43,20 +41,33 @@ namespace SayolloSDK
         [SerializeField] private GameObject purchaseAdCanvas;
         private VideoAd videoAd;
         private PurchaseAd purchAd;
-        private WebRequestController webRequestController;
         private SayolloSdkConfig sayolloSdkConfig;
 
         private void Init()
         {
             sayolloSdkConfig = Resources.Load<SayolloSdkConfig>("SayolloSdkConfig");
-            webRequestController = new WebRequestController();
         }
 
-        public VideoAd GetVideoAd()
+        class EmptyDisposable : IDisposable
+        {
+            public void Dispose() {}
+        }
+
+        // You can dispose returned object to cancel ad showing
+        public IDisposable ShowVideoAd(Action<AdResult, string> resultCallback)
         {
             if (videoAd != null)
-                videoAd.Cancel(false);
-            videoAd = new VideoAd(webRequestController, sayolloSdkConfig.VideoAdCanvasPrefab, sayolloSdkConfig.VideoUri);
+            {
+                resultCallback(AdResult.Error, "ad is already shown");
+                return new EmptyDisposable();
+            }
+            videoAd = new VideoAd(sayolloSdkConfig.VideoAdCanvasPrefab, sayolloSdkConfig.VideoUri);
+            async void TrackVideoAd()
+            {
+                await videoAd.ShowVideo(resultCallback);
+                videoAd = null;
+            }
+            TrackVideoAd();
             return videoAd;
         }
 
@@ -64,7 +75,7 @@ namespace SayolloSDK
         {
             if (purchAd != null)
                 purchAd.Cancel(false);
-            purchAd = new PurchaseAd(webRequestController, sayolloSdkConfig.PurchaseAdCanvasPrefab, sayolloSdkConfig.PurchaseItemUrl, sayolloSdkConfig.UserInfoUrl);
+            purchAd = new PurchaseAd(sayolloSdkConfig.PurchaseAdCanvasPrefab, sayolloSdkConfig.PurchaseItemUrl, sayolloSdkConfig.UserInfoUrl);
             return purchAd;
         }
     }

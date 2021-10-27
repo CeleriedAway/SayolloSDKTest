@@ -10,46 +10,32 @@ using UnityEngine.Networking;
 
 namespace SayolloSDK
 {
-    public class WebRequestController
+    public static class WebTools
     {
-        public IEnumerator GetVideo(string uri, string fileName = "", Action<string> onSuccess = null, Action<string> onError = null)
+        public static async Task<byte[]> LoadData(string uri)
         {
             using (UnityWebRequest www = UnityWebRequest.Get(uri))
             {
-                yield return www.SendWebRequest();
-                if (www.result != UnityWebRequest.Result.Success)
-                {
-                    onError?.Invoke(www.error);
-                }
-                else
-                {
-                    if (fileName == string.Empty)
-                        fileName = uri.Split('/').Last();
-                    string filePath = $"{Application.dataPath}/SayolloSDK/Resources/{fileName}";
-                    if (File.Exists(filePath))
-                    {
-                        File.Delete(filePath);
-                    }
-                    File.WriteAllBytes(filePath, www.downloadHandler.data);
-                    onSuccess?.Invoke(filePath);
-                }
+                await www.SendWebRequest();
+                return www.downloadHandler.data;
             }
         }
-
-        public IEnumerator GetRequest(string uri, Action<string> onSuccess = null, Action<string> onError = null)
+        
+        public static async Task<string> LoadString(string uri)
         {
             using (UnityWebRequest www = UnityWebRequest.Get(uri))
             {
-                yield return www.SendWebRequest();
-
-                if (www.result != UnityWebRequest.Result.Success)
-                {
-                    onError?.Invoke(www.error);
-                }
-                else
-                {
-                    onSuccess?.Invoke(www.downloadHandler.text);
-                }
+                await www.SendWebRequest();
+                return www.downloadHandler.text;
+            }
+        }
+        
+        public static async Task<Texture2D> LoadImage(string uri)
+        {
+            using (UnityWebRequest www = UnityWebRequest.Get(uri))
+            {
+                await www.SendWebRequest();
+                return ((DownloadHandlerTexture)www.downloadHandler).texture;
             }
         }
 
@@ -93,22 +79,6 @@ namespace SayolloSDK
                 else
                 {
                     onSuccess?.Invoke(www.downloadHandler.text);
-                }
-            }
-        }
-
-        public IEnumerator DownloadImage(string mediaUrl, Action<Texture2D> onSuccess = null, Action<string> onError = null)
-        {
-            using (UnityWebRequest www = UnityWebRequestTexture.GetTexture(mediaUrl))
-            {
-                yield return www.SendWebRequest();
-                if (www.result != UnityWebRequest.Result.Success)
-                {
-                    onError?.Invoke(www.error);
-                }
-                else
-                {
-                    onSuccess?.Invoke(((DownloadHandlerTexture)www.downloadHandler).texture);
                 }
             }
         }

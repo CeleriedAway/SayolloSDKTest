@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,94 +11,78 @@ using UnityEngine.Video;
 
 namespace SayolloSDK
 {
-    public class VideoAd
+    class VideoAd : IDisposable
     {
-        private WebRequestController webRequestController;
         private string uri;
         private bool showOnLoad;
-        private string savedVideoPath;
         private GameObject canvasPrefab;
         private GameObject canvas;
+        public bool videoEnded;
+        public bool cancelled;
 
-        public UnityEvent onDismissed = new UnityEvent();
-        public UnityEvent onFinished = new UnityEvent();
-
-        public SayolloSDK.AdStatus Status { get; private set; }
-        public VideoAd(WebRequestController requestController, GameObject videoAdCanvasPrefab, string videoUri)
+        public VideoAd(GameObject videoAdCanvasPrefab, string videoUri)
         {
-            webRequestController = requestController;
             canvasPrefab = videoAdCanvasPrefab;
             uri = videoUri;
         }
 
-        public void Show()
+        static string videoFileName = "video";
+        string savedVideoPath => Path.Combine(Application.persistentDataPath, videoFileName);
+        bool videoIsLoaded => File.Exists(savedVideoPath);
+
+        public async Task ShowVideo(Action<SayolloSDK.AdResult, string> resultCallback)
         {
-            if (Status == SayolloSDK.AdStatus.Ready)
+            try
+            {
+                var videoShowTask = ShowVideo();
+                while (videoShowTask.Status == TaskStatus.Running)
+                {
+                    if (cancelled) break;
+                    await Task.Yield();
+                }
+                if (videoEnded) resultCallback(SayolloSDK.AdResult.Success, "");
+                else if (cancelled) resultCallback(SayolloSDK.AdResult.Cancelled, "");
+            }
+            catch (Exception e)
+            {
+                resultCallback(SayolloSDK.AdResult.Error, e.Message);
+            }
+            finally
+            {
+                Dispose();
+            }
+        }
+
+        async Task ShowVideo()
+        {
+            if (videoIsLoaded)
             {
                 ShowSavedVideo(savedVideoPath);
+                return;
             }
-            else
-            {
-                showOnLoad = true;
-                Load();
-            }
-        }
 
-        public void Load()
-        {
-            Status = SayolloSDK.AdStatus.Loading;
-            SayolloSDK.Instance.StartCoroutine
-            (
-                webRequestController.GetRequest(
-                    uri,
-                    HandleXmlLoaded,
-                    HandleXmlLoadError)
-            );
-        }
-
-        private void HandleXmlLoaded(string result)
-        {
-            XDocument document = XDocument.Parse(result);
+            var xml = await WebTools.LoadString(uri);
+            XDocument document = XDocument.Parse(xml);
             var data = document.ToDictionary();
             if (!data.ContainsKey("MediaFile"))
             {
                 return;
             }
-            DownloadVideo(data["MediaFile"]);
-        }
 
-        private void HandleXmlLoadError(string error)
-        {
-            Status = SayolloSDK.AdStatus.Cancelled;
-        }
+            var videoUrl = data["MediaFile"];
+            var video = await WebTools.LoadData(videoUrl);
 
-        private void DownloadVideo(string videoUri)
-        {
-            SayolloSDK.Instance.StartCoroutine
-            (
-                webRequestController.GetVideo(videoUri,
-                    onSuccess: HandleVideoDownloaded,
-                    onError: HandleVideoDownloadError)
-            );
-        }
-        private void HandleVideoDownloaded(string result)
-        {
-            Status = SayolloSDK.AdStatus.Ready;
-            if (showOnLoad)
+            File.WriteAllBytes(savedVideoPath, video);
+            ShowSavedVideo(savedVideoPath);
+            
+            while (!videoEnded && !cancelled)
             {
-                showOnLoad = false;
-                ShowSavedVideo(result);
+                await Task.Yield();
             }
-        }
-
-        private void HandleVideoDownloadError(string error)
-        {
-            Status = SayolloSDK.AdStatus.Cancelled;
         }
 
         private void ShowSavedVideo(string path)
         {
-            Status = SayolloSDK.AdStatus.InProgress;
             canvas = GameObject.Instantiate(canvasPrefab);
             VideoPlayer videoPlayer = canvas.GetComponentInChildren<VideoPlayer>();
             videoPlayer.url = path;
@@ -106,22 +91,16 @@ namespace SayolloSDK
             videoPlayer.Play();
             videoPlayer.loopPointReached += HandleVideoEnded;
         }
+
         private void HandleVideoEnded(VideoPlayer player)
         {
-            GameObject.Destroy(canvas);
-            Status = SayolloSDK.AdStatus.Finished;
-            onFinished?.Invoke();
+            videoEnded = true;
         }
 
-        public void Cancel(bool invokeEvent = true)
+        public void Dispose()
         {
-            GameObject.Destroy(canvas);
-            SayolloSDK.Instance.StopAllCoroutines();
-            Status = SayolloSDK.AdStatus.Cancelled;
-            if (invokeEvent)
-                onDismissed?.Invoke();
-            onDismissed?.RemoveAllListeners();
-            onFinished?.RemoveAllListeners();
+            cancelled = true;
+            if (canvas) GameObject.Destroy(canvas);
         }
     }
 }
